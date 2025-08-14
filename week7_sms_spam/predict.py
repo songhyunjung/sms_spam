@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 import pandas as pd
 from collections import OrderedDict
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 
 from transformers import BertTokenizer
 from data.sms_spam_dataset import load_sms_spam_dataset
@@ -17,7 +18,10 @@ def predict_and_evaluate():
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
     # 테스트 데이터셋 로드 (test.parquet 경로 확인 필요)
-    test_dataset = load_sms_spam_dataset(tokenizer, test_file="/root/week7_sms_spam/sms_spam_test.parquet")
+    test_dataset = load_sms_spam_dataset(
+        tokenizer,
+        test_file="/root/week7_sms_spam/sms_spam_test.parquet"
+    )
 
     # DataLoader 정의 (배치 사이즈 32, shuffle 안함)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
@@ -27,7 +31,10 @@ def predict_and_evaluate():
     model.to(device)
 
     # 저장된 체크포인트 불러오기
-    checkpoint = torch.load("/root/lightning_logs/checkpoints/spam-classifier-epoch=02-val_loss=0.0319.ckpt", map_location=device)
+    checkpoint = torch.load(
+        "/root/lightning_logs/checkpoints/spam-classifier-epoch=02-val_loss=0.0319.ckpt",
+        map_location=device
+    )
     state_dict = checkpoint['state_dict']
 
     # 체크포인트 키 앞에 'model.' 접두사 제거
@@ -52,23 +59,33 @@ def predict_and_evaluate():
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['label'].to(device)
 
-            # 모델 출력 (attention_mask를 사용하는 경우)
+            # 모델 출력
             outputs = model(inputs, attention_mask)
             preds = torch.argmax(outputs, dim=1)
 
             all_preds.extend(preds.cpu().tolist())
             all_labels.extend(labels.cpu().tolist())
 
-    # 정확도 계산
-    accuracy = sum([p == l for p, l in zip(all_preds, all_labels)]) / len(all_labels)
-    print(f"Test Accuracy: {accuracy:.4f}")
+    # 정확도, Precision, Recall, F1-score 계산
+    accuracy = accuracy_score(all_labels, all_preds)
+    precision = precision_score(all_labels, all_preds)
+    recall = recall_score(all_labels, all_preds)
+    f1 = f1_score(all_labels, all_preds)
 
-    # 예측 결과 DataFrame으로 저장
+    print(f"Test Accuracy : {accuracy:.4f}")
+    print(f"Precision     : {precision:.4f}")
+    print(f"Recall        : {recall:.4f}")
+    print(f"F1-score      : {f1:.4f}")
+
+    # 클래스별 상세 보고서 출력
+    print("\nClassification Report:")
+    print(classification_report(all_labels, all_preds, digits=4))
+
+    # 예측 결과 저장
     df = pd.DataFrame({
         'label': all_labels,
         'prediction': all_preds
     })
-
     df.to_csv("prediction_results.csv", index=False)
     print("Prediction results saved to prediction_results.csv")
 
